@@ -27,11 +27,6 @@ cameras with either radar or lidar:
 - Eight cameras paired with four lidars (8C+4L). 
 
 
-
-
-
-
-
 ## Key Features
 
 Discover the key features that set our implementation apart and see how it meets the sensor
@@ -56,17 +51,15 @@ hardware platform's capabilities, this reference implementation serves as the pe
 
 
 
-
 <!--hide_directive
 :::{toctree}
 :hidden:
 
-.. toctree::
-   Get-Started-Guide
+   get-started-guide
    prerequisites
    How it Works <how-it-works.md>
    system-req
-   <Advanced user guide <advanced-user-guide.md>
+   Advanced user guide <advanced-user-guide.md>
    APIs
    FAQ
    release-notes
