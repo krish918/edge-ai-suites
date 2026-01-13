@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
-.python-version
+**/.python-version
 
 # Ignore environment variables
 .env
@@ -13,10 +13,10 @@ __pycache__/
 *$py.class
 
 # Ignore virtual environment directories
-venv/
-env/
-.venv/
-.env/
+**/venv/
+**/env/
+**/.venv/
+**/.env/
 
 # Ignore log files
 *.log
@@ -32,8 +32,8 @@ env/
 logs/
 
 # Ignore model files
-ov-model/
-ov-models/
+**/ov-model/
+**/ov-models/
 
 
 # Ignore pytest cache
