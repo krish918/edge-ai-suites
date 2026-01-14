@@ -20,7 +20,7 @@ if [ "$#" -eq 0 ] || ([ "$#" -eq 1 ] && [ "$1" = "--help" ]); then
     echo -e "  --run:                   Start the services"
     echo -e "  --setup:                 Build and run the services (first time setup)"
     echo -e "  --restart [service]:     Restart services with updated environment variables"
-    echo -e "                           • agent         - Restart only Scene Intelligence services"
+    echo -e "                           • agent         - Restart only Smart-Traffic-Intersection-Agent services"
     echo -e "                           • prerequisite  - Restart only prerequisite services (edge-ai-suites)"
     echo -e "                           • (no argument) - Restart all services"
     echo -e "  --stop:                  Stop the services"
@@ -47,7 +47,7 @@ elif [ "$1" = "--restart" ] && [ "$#" -eq 2 ] && [ "$2" != "agent" ] && [ "$2" !
     return 1
 
 elif [ "$1" = "--stop" ] || [ "$1" = "--clean" ]; then
-    echo -e "${YELLOW}Stopping Smart Traffic Intersection Agent... ${NC}"
+    echo -e "${YELLOW}Stopping Smart-Traffic-Intersection-Agent... ${NC}"
     
     # check if ri-compose.yaml exists and run docker compose down accordingly
     if [ -L "docker/ri-compose.yaml" ]; then
@@ -57,17 +57,17 @@ elif [ "$1" = "--stop" ] || [ "$1" = "--clean" ]; then
     fi
 
     if [ $? -ne 0 ]; then
-        echo -e "${RED}Failed to stop Smart Traffic Intersection Agent services. ${NC}"
+        echo -e "${RED}Failed to stop Smart-Traffic-Intersection-Agent services. ${NC}"
         return 1
     fi
-    echo -e "${GREEN}All containers for Smart Traffic Intersection Agent stopped and removed! ${NC}"
+    echo -e "${GREEN}All containers for Smart-Traffic-Intersection-Agent stopped and removed! ${NC}"
 
     if [ "$1" = "--clean" ]; then
-        echo -e "${YELLOW}Removing volumes for Smart Traffic Intersection Agent ... ${NC}"
+        echo -e "${YELLOW}Removing volumes for Smart-Traffic-Intersection-Agent ... ${NC}"
         docker volume ls | grep traffic-agent | awk '{ print $2 }' | xargs docker volume rm 2>/dev/null
 
         if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to delete volumes for Smart Traffic Intersection Agent services. ${NC}"
+            echo -e "${RED}Failed to delete volumes for Smart-Traffic-Intersection-Agent services. ${NC}"
             return 1
         fi
         echo -e "${GREEN}Docker cleanup completed successfully. ${NC}"
@@ -152,7 +152,7 @@ fi
 export TAG=${TAG:-latest}
 export REGISTRY=${REGISTRY:-}
 
-# Traffic Intelligence Service Configuration
+# Smart-Traffic-Intersection-Agent Configuration
 export APP_BACKEND_PORT=${TRAFFIC_AGENT_BACKEND_PORT:-8081}
 export APP_UI_PORT=${TRAFFIC_AGENT_UI_PORT:-7860}
 export REFRESH_INTERVAL=${REFRESH_INTERVAL:-15}
@@ -200,9 +200,8 @@ export no_proxy_env=${no_proxy}
 
 # Function to build and start the services
 build_and_start_service() {
-    echo -e "${BLUE}==> Starting Smart Traffic Intelligence Agent ...${NC}"
+    echo -e "${BLUE}==> Starting Smart-Traffic-Intersection-Agent ...${NC}"
 
-    
     # Read intersection-config.json to set intersection-specific environment variables
     local INTERSECTION_CONFIG_FILE="$APP_DIR/intersection-config.json"
     if [ ! -f "$INTERSECTION_CONFIG_FILE" ]; then
@@ -225,24 +224,24 @@ build_and_start_service() {
     docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml up -d --build 2>&1 1>/dev/null
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Scene Intelligence Services built and started successfully!${NC}"
+        echo -e "${GREEN}Smart-Traffic-Intersection-Agent Services built and started successfully!${NC}"
     else
-        echo -e "${RED}Failed to build and start Scene Intelligence Services${NC}"
+        echo -e "${RED}Failed to build and start Smart-Traffic-Intersection-Agent Services${NC}"
         return 1
     fi
 }
 
 # Function to start the services
 start_service() {
-    echo -e "${BLUE}==> Starting Scene Intelligence Services...${NC}"
+    echo -e "${BLUE}==> Starting Smart-Traffic-Intersection-Agent Services...${NC}"
     
     # Start the services
     docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml up -d 2>&1 1>/dev/null
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Scene Intelligence Services started successfully!${NC}"
+        echo -e "${GREEN}Smart-Traffic-Intersection-Agent Services started successfully!${NC}"
     else
-        echo -e "${RED}Failed to start Scene Intelligence Services${NC}"
+        echo -e "${RED}Failed to start Smart-Traffic-Intersection-Agent Services${NC}"
         return 1
     fi
 }
@@ -253,13 +252,13 @@ restart_service() {
     
     case "$SERVICE_TYPE" in
         agent)
-            echo -e "${BLUE}==> Restarting Scene Intelligence Services with updated environment variables...${NC}"
+            echo -e "${BLUE}==> Restarting Smart-Traffic-Intersection-Agent Services with updated environment variables...${NC}"
             
-            # Stop the Scene Intelligence services
-            docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml down
+            # Stop the Smart-Traffic-Intersection-Agent services
+            docker compose -f docker/agent-compose.yaml down
             
             if [ $? -ne 0 ]; then
-                echo -e "${RED}Failed to stop Scene Intelligence services${NC}"
+                echo -e "${RED}Failed to stop Smart-Traffic-Intersection-Agent services${NC}"
                 return 1
             fi
             
@@ -267,9 +266,9 @@ restart_service() {
             docker compose -f docker/agent-compose.yaml up -d --force-recreate
             
             if [ $? -eq 0 ]; then
-                echo -e "${GREEN}Scene Intelligence Services restarted successfully with updated configuration!${NC}"
+                echo -e "${GREEN}Smart-Traffic-Intersection-Agent Services restarted successfully with updated configuration!${NC}"
             else
-                echo -e "${RED}Failed to restart Scene Intelligence Services${NC}"
+                echo -e "${RED}Failed to restart Smart-Traffic-Intersection-Agent Services${NC}"
                 return 1
             fi
             ;;
@@ -349,8 +348,8 @@ restart_service() {
                 echo -e "${YELLOW}Prerequisite services directory not found, skipping...${NC}"
             fi
             
-            # Restart Scene Intelligence services
-            echo -e "${BLUE}==> Restarting Scene Intelligence Services...${NC}"
+            # Restart Smart-Traffic-Intersection-Agent services
+            echo -e "${BLUE}==> Restarting Smart-Traffic-Intersection-Agent Services...${NC}"
             docker compose -f docker/compose.yaml down
             docker compose -f docker/compose.yaml up -d --force-recreate
             
@@ -365,13 +364,13 @@ restart_service() {
                 echo -e "  • Grafana Dashboard: ${YELLOW}http://${HOST_IP}:3000${NC}"
                 echo -e "  • Node-RED UI: ${YELLOW}http://${HOST_IP}:1880${NC}"
                 echo ""
-                echo -e "${BLUE}Scene Intelligence Services:${NC}"
-                echo -e "  • Traffic Intelligence API: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_PORT}${NC}"
-                echo -e "  • Traffic Intelligence UI: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_UI_PORT}${NC}"
+                echo -e "${BLUE}Smart-Traffic-Intersection-Agent Services:${NC}"
+                echo -e "  • Backend API: ${YELLOW}http://${HOST_IP}:${APP_BACKEND_PORT}${NC}"
+                echo -e "  • UI: ${YELLOW}http://${HOST_IP}:${APP_UI_PORT}${NC}"
                 echo -e "  • VLM Service: ${YELLOW}http://${HOST_IP}:${VLM_SERVICE_PORT}${NC}"
                 echo ""
             else
-                echo -e "${RED}Failed to restart Scene Intelligence Services${NC}"
+                echo -e "${RED}Failed to restart Smart-Traffic-Intersection-Agent Services${NC}"
                 return 1
             fi
             ;;
