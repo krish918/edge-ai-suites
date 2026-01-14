@@ -46,197 +46,96 @@ elif [ "$1" = "--restart" ] && [ "$#" -eq 2 ] && [ "$2" != "agent" ] && [ "$2" !
     echo -e "${YELLOW}Use --help for usage information${NC}"
     return 1
 
-elif [ "$1" = "--stop" ]; then
-    # If --stop is passed, bring down the Docker containers and stop 
-    echo -e "${YELLOW}Stopping Scene Intelligence services... ${NC}"
+elif [ "$1" = "--stop" ] || [ "$1" = "--clean" ]; then
+    echo -e "${YELLOW}Stopping Smart Traffic Intersection Agent... ${NC}"
     
-    # Stop Docker services
-    docker compose -f docker/compose.yaml down
+    # check if ri-compose.yaml exists and run docker compose down accordingly
+    if [ -L "docker/ri-compose.yaml" ]; then
+        docker compose -f docker/ri-compose.yaml -f docker/agent-compose.yaml down 2> /dev/null
+    else
+        docker compose -f docker/agent-compose.yaml down 2> /dev/null
+    fi
+
     if [ $? -ne 0 ]; then
+        echo -e "${RED}Failed to stop Smart Traffic Intersection Agent services. ${NC}"
         return 1
     fi
-    echo -e "${GREEN}Scene Intelligence services stopped successfully. ${NC}"
-    
-    # Stop edge-ai-suites services if they exist
-    EDGE_AI_SUITES_DIR="edge-ai-suites"
-    if [ -d "$EDGE_AI_SUITES_DIR/metro-ai-suite/metro-vision-ai-app-recipe" ]; then
-        cd "$EDGE_AI_SUITES_DIR/metro-ai-suite/metro-vision-ai-app-recipe"
-        if [ -f "docker-compose.yml" ] || [ -f "compose.yaml" ]; then
-            echo -e "${YELLOW}Stopping edge-ai-suites services... ${NC}"
-            docker compose down 2>/dev/null
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}edge-ai-suites services stopped successfully. ${NC}"
-            else
-                echo -e "${YELLOW}Warning: Could not stop edge-ai-suites services${NC}"
-            fi
-        fi
-        cd - > /dev/null
-    else
-        echo -e "${YELLOW}edge-ai-suites services not found, skipping... ${NC}"
-    fi
-    
-    return 0
+    echo -e "${GREEN}All containers for Smart Traffic Intersection Agent stopped and removed! ${NC}"
 
-elif [ "$1" = "--clean" ]; then
-    # If --clean is passed, clean up containers and volumes
-    echo -e "${YELLOW}Cleaning up containers and volumes... ${NC}"
-    
-    docker compose -f docker/compose.yaml down 2>/dev/null || true
-    
-    echo -e "${YELLOW}Removing scene intelligence volumes... ${NC}"
-    docker volume ls | grep scene-intelligence | awk '{ print $2 }' | xargs docker volume rm 2>/dev/null || true
-    
-    if [ $? -ne 0 ]; then
-        return 1
-    fi
-    echo -e "${GREEN}Docker cleanup completed successfully. ${NC}"
-    
-    # Clean up the cloned edge-ai-suites repository
-    EDGE_AI_SUITES_DIR="edge-ai-suites"
-    if [ -d "$EDGE_AI_SUITES_DIR" ]; then
-        echo -e "${YELLOW}Cleaning up edge-ai-suites repository... ${NC}"
-        
-        # Stop docker services in edge-ai-suites if they exist
-        if [ -d "$EDGE_AI_SUITES_DIR/metro-ai-suite/metro-vision-ai-app-recipe" ]; then
-            cd "$EDGE_AI_SUITES_DIR/metro-ai-suite/metro-vision-ai-app-recipe"
-            if [ -f "docker-compose.yml" ] || [ -f "compose.yaml" ]; then
-                echo -e "${YELLOW}Stopping edge-ai-suites docker services... ${NC}"
-                docker compose down 2>/dev/null || true
-                
-                echo -e "${YELLOW}Removing metro-vision-ai-app-recipe volumes... ${NC}"
-                docker volume ls | grep metro-vision-ai-app-recipe | awk '{ print $2 }' | xargs docker volume rm 2>/dev/null || true
-            fi
-            cd - > /dev/null
-        fi
-        
-    else
-        echo -e "${YELLOW}edge-ai-suites repository not found, skipping... ${NC}"
-    fi
-    
-    echo -e "${GREEN}Full cleanup completed successfully. ${NC}"
-    return 0
+    if [ "$1" = "--clean" ]; then
+        echo -e "${YELLOW}Removing volumes for Smart Traffic Intersection Agent ... ${NC}"
+        docker volume ls | grep traffic-agent | awk '{ print $2 }' | xargs docker volume rm 2>/dev/null
 
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Failed to delete volumes for Smart Traffic Intersection Agent services. ${NC}"
+            return 1
+        fi
+        echo -e "${GREEN}Docker cleanup completed successfully. ${NC}"
+    fi
+
+    return 0
 fi
 
 # ============================================================================
 # PREREQUISITES: Setup edge-ai-suites before running the application
 # ============================================================================
 
-# Export HOST_IP early so it can be used in prerequisite checks
+# Set application-specific environment variables
+export SAMPLE_APP="smart-intersection"
+export APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export HOST_IP=$(ip route get 1 2>/dev/null | awk '{print $7}')
-# If HOST_IP is empty, use localhost
 if [ -z "$HOST_IP" ]; then
-    export HOST_IP="127.0.0.1"
+    export HOST_IP="localhost"
 fi
+
+SUBMODULE="deps/metro-vision"
+SUBMODULE_PATH="$APP_DIR/$SUBMODULE"
+export DEPS_DIR="$SUBMODULE_PATH/metro-ai-suite/metro-vision-ai-app-recipe"
+export RI_DIR="$DEPS_DIR/$SAMPLE_APP"
+
 # Function to check if prerequisites are met
 check_and_setup_prerequisites() {
-    local EDGE_AI_SUITES_DIR="edge-ai-suites"
-    local REQUIRED_BRANCH="release-1.2.0"
-    
-    echo -e "${BLUE}==> Checking prerequisites...${NC}"
-    
-    # Check if edge-ai-suites directory exists
-    if [ ! -d "$EDGE_AI_SUITES_DIR" ]; then
-        echo -e "${YELLOW}edge-ai-suites not found. Cloning repository...${NC}"
-        
-        # Clone the repository with the specific branch (shallow clone, only latest layer)
-        git clone --depth 1 --single-branch --branch $REQUIRED_BRANCH https://github.com/open-edge-platform/edge-ai-suites.git
-        
+    echo -e "${BLUE}==> Setting up required submodules ...${NC}"
+
+    if [ ! -d "$DEPS_DIR" ]; then
+        # Run git submodule init and update to fetch the dependencies
+        echo -e "${YELLOW}Dependencies not found. Initializing and updating git submodules...${NC}"
+        git -C $APP_DIR submodule update --init --depth 1 $SUBMODULE
+        git -C $SUBMODULE_PATH sparse-checkout init --cone
+        git -C $SUBMODULE_PATH sparse-checkout set metro-ai-suite/metro-vision-ai-app-recipe
+
+        # Verify if the git commands were successful
         if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to clone edge-ai-suites repository${NC}"
+            echo -e "${RED}Failed to initialize and update dependencies${NC}"
             return 1
         fi
-        
-        echo -e "${GREEN}Successfully cloned edge-ai-suites${NC}"
-        
-    else
-        echo -e "${GREEN}edge-ai-suites directory already exists${NC}"
-        
     fi
-    
-    # Navigate to the metro-vision-ai-app-recipe directory
-    local METRO_DIR="$EDGE_AI_SUITES_DIR/metro-ai-suite/metro-vision-ai-app-recipe"
-    
-    if [ ! -d "$METRO_DIR" ]; then
-        echo -e "${RED}Directory $METRO_DIR not found${NC}"
-        return 1
-    fi
-    
-    cd "$METRO_DIR"
-    
+
     # Check if install.sh exists
-    if [ ! -f "install.sh" ]; then
-        echo -e "${RED}install.sh not found in $METRO_DIR${NC}"
-        cd - > /dev/null
+    if [ ! -f "$RI_DIR/install.sh" ]; then
+        echo -e "${RED}Installation script not found for dependency : $SAMPLE_APP ${NC}"
         return 1
-    fi
-    
-    # Comment out the problematic chown lines in the smart-intersection install.sh
-    echo -e "${BLUE}==> Updating install.sh to comment out chown commands...${NC}"
-    if [ -f "smart-intersection/install.sh" ]; then
-        sed -i 's/^sudo chown -R \$USER:\$USER chart\/files\/secrets$/# &/' smart-intersection/install.sh
-        sed -i 's/^sudo chown -R \$USER:\$USER src\/secrets$/# &/' smart-intersection/install.sh
-        echo -e "${GREEN}Successfully commented out chown commands in smart-intersection/install.sh${NC}"
-    else
-        echo -e "${YELLOW}Warning: smart-intersection/install.sh not found, skipping sed modifications${NC}"
     fi
     
     # Run the installation script
     echo -e "${BLUE}==> Running installation script for smart-intersection...${NC}"
-    ./install.sh smart-intersection
-    
+    cd $RI_DIR && ./install.sh $HOST_IP && cd - > /dev/null
     if [ $? -ne 0 ]; then
         echo -e "${RED}Failed to run install.sh for smart-intersection${NC}"
         cd - > /dev/null
         return 1
     fi
-    
     echo -e "${GREEN}Installation script completed successfully${NC}"
-    
-    # Download container images and run with Docker Compose
-    echo -e "${BLUE}==> Downloading container images and starting services...${NC}"
-    docker compose up -d
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Failed to start services with docker compose${NC}"
-        cd - > /dev/null
-        return 1
-    fi
-    
-    echo -e "${GREEN}Container images downloaded and services started${NC}"
-    
-    # Verify running status
-    echo -e "${BLUE}==> Verifying running status...${NC}"
-    sleep 5  # Give services a moment to start
-    
-    docker compose ps
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Services are running. Verification completed.${NC}"
-    else
-        echo -e "${YELLOW}Warning: Could not verify service status${NC}"
-    fi
-    
-    # Return to the original directory
-    cd - > /dev/null
-    
-    echo -e "${GREEN}Prerequisites setup completed successfully!${NC}"
-    echo ""
-    
-    # Display edge-ai-suites service URLs
-    echo -e "${BLUE}Edge AI Suites Services:${NC}"
-    echo -e "  • SceneScape Web UI: ${YELLOW}https://${HOST_IP}:443${NC}"
-    echo -e "  • DLStreamer Pipeline Server API: ${YELLOW}http://${HOST_IP}:8080${NC}"
-    echo -e "  • InfluxDB UI: ${YELLOW}http://${HOST_IP}:8086${NC}"
-    echo -e "  • Grafana Dashboard: ${YELLOW}http://${HOST_IP}:3000${NC}"
-    echo -e "  • Node-RED UI: ${YELLOW}http://${HOST_IP}:1880${NC}"
-    echo ""
+
+    # Create symbolic link to compose-scenescape.yml in docker dir of agent application
+    rm "$APP_DIR/docker/ri-compose.yaml" 2> /dev/null 
+    ln -sf "$DEPS_DIR/compose-scenescape.yml" "$APP_DIR/docker/ri-compose.yaml"
     
     return 0
 }
 
-# Run prerequisites check and setup (skip if only stopping or cleaning)
-if [ "$1" != "--stop" ] && [ "$1" != "--clean" ] && [ "$1" != "--help" ] && [ "$1" != "--restart" ]; then
+# Run prerequisites check and setup (skip if only shopwing help or setting envs)
+if [ "$1" != "--help" ] && [ "$1" != "--setenv" ] && [ "$1" != "--clean" ] && [ "$1" != "--stop" ]; then
     check_and_setup_prerequisites
     
     if [ $? -ne 0 ]; then
@@ -254,8 +153,8 @@ export TAG=${TAG:-latest}
 export REGISTRY=${REGISTRY:-}
 
 # Traffic Intelligence Service Configuration
-export TRAFFIC_INTELLIGENCE_PORT=${TRAFFIC_INTELLIGENCE_PORT:-8081}
-export TRAFFIC_INTELLIGENCE_UI_PORT=${TRAFFIC_INTELLIGENCE_UI_PORT:-7860}
+export APP_BACKEND_PORT=${TRAFFIC_AGENT_BACKEND_PORT:-8081}
+export APP_UI_PORT=${TRAFFIC_AGENT_UI_PORT:-7860}
 export REFRESH_INTERVAL=${REFRESH_INTERVAL:-15}
 
 # User and group IDs for containers
@@ -301,24 +200,32 @@ export no_proxy_env=${no_proxy}
 
 # Function to build and start the services
 build_and_start_service() {
-    echo -e "${BLUE}==> Building and Starting Scene Intelligence Services...${NC}"
+    echo -e "${BLUE}==> Starting Smart Traffic Intelligence Agent ...${NC}"
+
     
+    # Read intersection-config.json to set intersection-specific environment variables
+    local INTERSECTION_CONFIG_FILE="$APP_DIR/intersection-config.json"
+    if [ ! -f "$INTERSECTION_CONFIG_FILE" ]; then
+        echo -e "${RED}Intersection configuration file not found: $INTERSECTION_CONFIG_FILE${NC}"
+        return 1
+    fi
+
+    export INTERSECTION_NAME=$(grep -oP '"intersection-name"\s*:\s*"\K[^"]+' "$INTERSECTION_CONFIG_FILE")
+    export INTERSECTION_LATITUDE=$(grep -oP '"latitude"\s*:\s*\K-?[\d.]+(?=,|$)' "$INTERSECTION_CONFIG_FILE")
+    export INTERSECTION_LONGITUDE=$(grep -oP '"longitude"\s*:\s*\K-?[\d.]+' "$INTERSECTION_CONFIG_FILE")
+    export APP_BACKEND_PORT=$(grep -oP '"backend_port"\s*:\s*\K\d+' "$INTERSECTION_CONFIG_FILE")
+    export APP_UI_PORT=$(grep -oP '"ui_port"\s*:\s*\K\d+' "$INTERSECTION_CONFIG_FILE")
+
+    if [ "$APP_BACKEND_PORT" = "" ] || [ "$APP_UI_PORT" = "" ]; then
+        unset APP_BACKEND_PORT
+        unset APP_UI_PORT
+    fi    
+
     # Build and start the services
-    docker compose -f docker/compose.yaml up -d --build 2>&1 1>/dev/null
+    docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml up -d --build 2>&1 1>/dev/null
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Scene Intelligence Services built and started successfully!${NC}"
-        
-        echo ""
-        echo -e "${BLUE}Services:${NC}"
-        echo -e "  • Traffic Intelligence API Docs: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_PORT}/docs${NC}"
-        echo -e "  • Traffic Intelligence UI: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_UI_PORT}${NC}"
-        echo -e "  • VLM Service API Docs: ${YELLOW}http://${HOST_IP}:${VLM_SERVICE_PORT}/docs${NC}"
-        echo ""
-        echo -e "${BLUE}To view logs:${NC}"
-        echo -e "  ${YELLOW}docker compose -f docker/compose.yaml logs -f${NC}"
-        echo -e "${BLUE}To stop the services:${NC}"
-        echo -e "  ${YELLOW}source setup.sh --stop${NC}"
     else
         echo -e "${RED}Failed to build and start Scene Intelligence Services${NC}"
         return 1
@@ -330,21 +237,10 @@ start_service() {
     echo -e "${BLUE}==> Starting Scene Intelligence Services...${NC}"
     
     # Start the services
-    docker compose -f docker/compose.yaml up -d
+    docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml up -d 2>&1 1>/dev/null
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Scene Intelligence Services started successfully!${NC}"
-        
-        echo ""
-        echo -e "${BLUE}Services:${NC}"
-        echo -e "  • Traffic Intelligence API: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_PORT}${NC}"
-        echo -e "  • Traffic Intelligence UI: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_UI_PORT}${NC}"
-        echo -e "  • VLM Service: ${YELLOW}http://${HOST_IP}:${VLM_SERVICE_PORT}${NC}"
-        echo ""
-        echo -e "${BLUE}To view logs:${NC}"
-        echo -e "  ${YELLOW}docker compose -f docker/compose.yaml logs -f${NC}"
-        echo -e "${BLUE}To stop the services:${NC}"
-        echo -e "  ${YELLOW}source setup.sh --stop${NC}"
     else
         echo -e "${RED}Failed to start Scene Intelligence Services${NC}"
         return 1
@@ -360,7 +256,7 @@ restart_service() {
             echo -e "${BLUE}==> Restarting Scene Intelligence Services with updated environment variables...${NC}"
             
             # Stop the Scene Intelligence services
-            docker compose -f docker/compose.yaml down
+            docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml down
             
             if [ $? -ne 0 ]; then
                 echo -e "${RED}Failed to stop Scene Intelligence services${NC}"
@@ -368,19 +264,10 @@ restart_service() {
             fi
             
             # Start with force-recreate to ensure env vars are picked up
-            docker compose -f docker/compose.yaml up -d --force-recreate
+            docker compose -f docker/agent-compose.yaml up -d --force-recreate
             
             if [ $? -eq 0 ]; then
                 echo -e "${GREEN}Scene Intelligence Services restarted successfully with updated configuration!${NC}"
-                
-                echo ""
-                echo -e "${BLUE}Services:${NC}"
-                echo -e "  • Traffic Intelligence API: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_PORT}${NC}"
-                echo -e "  • Traffic Intelligence UI: ${YELLOW}http://${HOST_IP}:${TRAFFIC_INTELLIGENCE_UI_PORT}${NC}"
-                echo -e "  • VLM Service: ${YELLOW}http://${HOST_IP}:${VLM_SERVICE_PORT}${NC}"
-                echo ""
-                echo -e "${BLUE}To view logs:${NC}"
-                echo -e "  ${YELLOW}docker compose -f docker/compose.yaml logs -f${NC}"
             else
                 echo -e "${RED}Failed to restart Scene Intelligence Services${NC}"
                 return 1
@@ -388,6 +275,7 @@ restart_service() {
             ;;
             
         prerequisite)
+            #TODO update this case implementation based on new submodule structure
             echo -e "${BLUE}==> Restarting Prerequisite Services (edge-ai-suites)...${NC}"
             
             local METRO_DIR="edge-ai-suites/metro-ai-suite/metro-vision-ai-app-recipe"
@@ -435,6 +323,7 @@ restart_service() {
             ;;
             
         all)
+            #TODO update based on new submodule structure
             echo -e "${BLUE}==> Restarting All Services with updated environment variables...${NC}"
             
             # Restart prerequisite services first

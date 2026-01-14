@@ -85,5 +85,3 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
-**/edge-ai-suites/
