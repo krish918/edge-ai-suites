@@ -4,8 +4,6 @@
 # include:
 #   - ${DEPS_DIR:-.}/compose-scenescape.yml
 
-name: traffic-agent
-
 secrets:
   root-cert:
     file: ${RI_DIR}/src/secrets/certs/scenescape-ca.pem

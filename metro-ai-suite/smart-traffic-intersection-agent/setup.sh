@@ -10,6 +10,15 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Verifiying intersection config file and setting project name based on intersection name defined in config
+INTERSECTION_CONFIG_FILE="$APP_DIR/intersection-config.json"
+if [ ! -f "$INTERSECTION_CONFIG_FILE" ]; then
+    echo -e "${RED}Intersection configuration file not found: $INTERSECTION_CONFIG_FILE${NC}"
+    return 1
+fi
+export INTERSECTION_NAME=$(grep -oP '"intersection-name"\s*:\s*"\K[^"]+' "$INTERSECTION_CONFIG_FILE")
+PROJECT_NAME=${INTERSECTION_NAME:-trafficagent}
+
 # Setting command usage and invalid arguments handling before the actual setup starts
 if [ "$#" -eq 0 ] || ([ "$#" -eq 1 ] && [ "$1" = "--help" ]); then
     # If no valid argument is passed, print usage information
@@ -51,9 +60,9 @@ elif [ "$1" = "--stop" ] || [ "$1" = "--clean" ]; then
     
     # check if ri-compose.yaml exists and run docker compose down accordingly
     if [ -L "docker/ri-compose.yaml" ]; then
-        docker compose -f docker/ri-compose.yaml -f docker/agent-compose.yaml down 2> /dev/null
+        docker compose -f docker/ri-compose.yaml -f docker/agent-compose.yaml -p ${PROJECT_NAME} down 2> /dev/null
     else
-        docker compose -f docker/agent-compose.yaml down 2> /dev/null
+        docker compose -f docker/agent-compose.yaml -p ${PROJECT_NAME} down 2> /dev/null
     fi
 
     if [ $? -ne 0 ]; then
@@ -64,12 +73,7 @@ elif [ "$1" = "--stop" ] || [ "$1" = "--clean" ]; then
 
     if [ "$1" = "--clean" ]; then
         echo -e "${YELLOW}Removing volumes for Smart-Traffic-Intersection-Agent ... ${NC}"
-        docker volume ls | grep traffic-agent | awk '{ print $2 }' | xargs docker volume rm 2>/dev/null
-
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to delete volumes for Smart-Traffic-Intersection-Agent services. ${NC}"
-            return 1
-        fi
+        docker volume ls | grep $PROJECT_NAME | awk '{ print $2 }' | xargs docker volume rm 2>/dev/null || true
         echo -e "${GREEN}Docker cleanup completed successfully. ${NC}"
     fi
 
@@ -202,14 +206,7 @@ export no_proxy_env=${no_proxy}
 build_and_start_service() {
     echo -e "${BLUE}==> Starting Smart-Traffic-Intersection-Agent ...${NC}"
 
-    # Read intersection-config.json to set intersection-specific environment variables
-    local INTERSECTION_CONFIG_FILE="$APP_DIR/intersection-config.json"
-    if [ ! -f "$INTERSECTION_CONFIG_FILE" ]; then
-        echo -e "${RED}Intersection configuration file not found: $INTERSECTION_CONFIG_FILE${NC}"
-        return 1
-    fi
-
-    export INTERSECTION_NAME=$(grep -oP '"intersection-name"\s*:\s*"\K[^"]+' "$INTERSECTION_CONFIG_FILE")
+    # set intersection-specific environment variables based on intersection-config.json 
     export INTERSECTION_LATITUDE=$(grep -oP '"latitude"\s*:\s*\K-?[\d.]+(?=,|$)' "$INTERSECTION_CONFIG_FILE")
     export INTERSECTION_LONGITUDE=$(grep -oP '"longitude"\s*:\s*\K-?[\d.]+' "$INTERSECTION_CONFIG_FILE")
     export APP_BACKEND_PORT=$(grep -oP '"backend_port"\s*:\s*\K\d+' "$INTERSECTION_CONFIG_FILE")
@@ -221,7 +218,7 @@ build_and_start_service() {
     fi    
 
     # Build and start the services
-    docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml up -d --build 2>&1 1>/dev/null
+    docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml -p $PROJECT_NAME up -d --build 2>&1 1>/dev/null
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Smart-Traffic-Intersection-Agent Services built and started successfully!${NC}"
@@ -236,7 +233,7 @@ start_service() {
     echo -e "${BLUE}==> Starting Smart-Traffic-Intersection-Agent Services...${NC}"
     
     # Start the services
-    docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml up -d 2>&1 1>/dev/null
+    docker compose --project-directory $DEPS_DIR -f docker/ri-compose.yaml -f docker/agent-compose.yaml -p $PROJECT_NAME up -d 2>&1 1>/dev/null
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Smart-Traffic-Intersection-Agent Services started successfully!${NC}"
@@ -263,7 +260,7 @@ restart_service() {
             fi
             
             # Start with force-recreate to ensure env vars are picked up
-            docker compose -f docker/agent-compose.yaml up -d --force-recreate
+            docker compose -f docker/agent-compose.yaml -p $PROJECT_NAME up -d --force-recreate
             
             if [ $? -eq 0 ]; then
                 echo -e "${GREEN}Smart-Traffic-Intersection-Agent Services restarted successfully with updated configuration!${NC}"
