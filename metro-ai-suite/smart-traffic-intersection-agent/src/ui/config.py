@@ -14,6 +14,7 @@ class Config:
     def get_all_settings(cls) -> Dict[str, Any]:
         """Get all configuration settings as a dictionary"""
         return {
+            "refresh_interval": cls.get_refresh_interval(),
             "api_url": cls.get_api_url(),
             "app_title": cls.get_app_title(),
             "app_port": cls.get_app_port(),
@@ -39,6 +40,10 @@ class Config:
         if value:
             return value
         return default
+    
+    @classmethod
+    def get_refresh_interval(cls) -> float:
+        return float(cls.get_value_from_env("REFRESH_INTERVAL", 10.0))
     
     @classmethod
     def get_api_url(cls) -> str:
